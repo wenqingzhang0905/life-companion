@@ -20,10 +20,11 @@ export default function CheckInPage() {
   const [sleepQuality, setSleepQuality] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [existingId, setExistingId] = useState<string | null>(null);
 
   const changeDate = (days: number) => {
-    const d = new Date(date);
+    const d = new Date(date + "T12:00:00");
     d.setDate(d.getDate() + days);
     const newDate = format(d, "yyyy-MM-dd");
     setDate(newDate);
@@ -67,6 +68,7 @@ export default function CheckInPage() {
   const handleSave = async () => {
     if (mood === 0 || energy === 0) return;
     setSaving(true);
+    setSaveError("");
     try {
       const entry: JournalEntry = {
         date,
@@ -81,16 +83,22 @@ export default function CheckInPage() {
         createdAt: Date.now(),
       };
 
-      if (existingId) {
-        await updateEntry(existingId, entry);
-      } else {
-        const id = await addEntry(entry);
-        setExistingId(id);
-      }
+      const savePromise = existingId
+        ? updateEntry(existingId, entry).then(() => existingId)
+        : addEntry(entry);
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Save timed out")), 10000)
+      );
+
+      const id = await Promise.race([savePromise, timeoutPromise]);
+      if (!existingId) setExistingId(id);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error("Failed to save entry:", error);
+      setSaveError("Could not save. Check your internet connection and Firebase setup.");
+      setTimeout(() => setSaveError(""), 5000);
     }
     setSaving(false);
   };
@@ -223,6 +231,18 @@ export default function CheckInPage() {
           <Save size={18} />
           {saving ? "Saving..." : saved ? "Saved!" : existingId ? "Update Entry" : "Save Entry"}
         </button>
+
+        {/* Save feedback */}
+        {saved && (
+          <div className="text-center text-success text-sm font-medium py-2 bg-success/10 rounded-xl">
+            Entry saved to Firebase successfully!
+          </div>
+        )}
+        {saveError && (
+          <div className="text-center text-accent text-sm font-medium py-2 bg-accent/10 rounded-xl">
+            {saveError}
+          </div>
+        )}
       </div>
     </div>
   );

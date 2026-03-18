@@ -14,6 +14,14 @@ import { JournalEntry, Streak } from "./types";
 
 const ENTRIES_COLLECTION = "journal_entries";
 const STREAKS_COLLECTION = "streaks";
+const TIMEOUT_MS = 8000;
+
+function withTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), TIMEOUT_MS)),
+  ]);
+}
 
 // Journal Entries
 export async function addEntry(entry: JournalEntry): Promise<string> {
@@ -25,7 +33,8 @@ export async function addEntry(entry: JournalEntry): Promise<string> {
 export async function getEntries(limit?: number): Promise<JournalEntry[]> {
   if (!isFirebaseConfigured || !db) return [];
   const q = query(collection(db, ENTRIES_COLLECTION), orderBy("date", "desc"));
-  const snapshot = await getDocs(q);
+  const snapshot = await withTimeout(getDocs(q), null);
+  if (!snapshot) return [];
   const entries = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as JournalEntry));
   return limit ? entries.slice(0, limit) : entries;
 }
@@ -38,15 +47,16 @@ export async function getEntriesByDateRange(start: string, end: string): Promise
     where("date", "<=", end),
     orderBy("date", "desc")
   );
-  const snapshot = await getDocs(q);
+  const snapshot = await withTimeout(getDocs(q), null);
+  if (!snapshot) return [];
   return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as JournalEntry));
 }
 
 export async function getEntryByDate(date: string): Promise<JournalEntry | null> {
   if (!isFirebaseConfigured || !db) return null;
   const q = query(collection(db, ENTRIES_COLLECTION), where("date", "==", date));
-  const snapshot = await getDocs(q);
-  if (snapshot.empty) return null;
+  const snapshot = await withTimeout(getDocs(q), null);
+  if (!snapshot || snapshot.empty) return null;
   const d = snapshot.docs[0];
   return { id: d.id, ...d.data() } as JournalEntry;
 }
@@ -71,7 +81,8 @@ export async function addStreak(streak: Streak): Promise<string> {
 export async function getStreaks(): Promise<Streak[]> {
   if (!isFirebaseConfigured || !db) return [];
   const q = query(collection(db, STREAKS_COLLECTION), orderBy("createdAt", "desc"));
-  const snapshot = await getDocs(q);
+  const snapshot = await withTimeout(getDocs(q), null);
+  if (!snapshot) return [];
   return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Streak));
 }
 

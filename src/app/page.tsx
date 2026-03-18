@@ -1,65 +1,211 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState } from "react";
+import { format, subDays } from "date-fns";
+import {
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+} from "recharts";
+import { PenSquare, TrendingUp, Flame, Brain } from "lucide-react";
+import Link from "next/link";
+import { JournalEntry, MOOD_LABELS, MOOD_EMOJIS } from "@/lib/types";
+import { getEntries } from "@/lib/firestore";
+
+export default function Dashboard() {
+  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadEntries();
+  }, []);
+
+  const loadEntries = async () => {
+    try {
+      const data = await getEntries(30);
+      setEntries(data.reverse());
+    } catch {
+      setEntries([]);
+    }
+    setLoading(false);
+  };
+
+  const today = format(new Date(), "yyyy-MM-dd");
+  const todayEntry = entries.find((e) => e.date === today);
+
+  const chartData = entries.slice(-14).map((e) => ({
+    date: format(new Date(e.date + "T12:00:00"), "MMM d"),
+    mood: e.mood,
+    energy: e.energy,
+  }));
+
+  const avgMood = entries.length > 0
+    ? (entries.reduce((s, e) => s + e.mood, 0) / entries.length).toFixed(1)
+    : "—";
+  const avgEnergy = entries.length > 0
+    ? (entries.reduce((s, e) => s + e.energy, 0) / entries.length).toFixed(1)
+    : "—";
+  const totalEntries = entries.length;
+
+  let streak = 0;
+  const sortedDates = [...entries].sort((a, b) => b.date.localeCompare(a.date));
+  for (let i = 0; i < sortedDates.length; i++) {
+    const expected = format(subDays(new Date(), i), "yyyy-MM-dd");
+    if (sortedDates[i]?.date === expected) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="animate-pulse text-muted">Loading your journey...</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="max-w-4xl mx-auto">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">
+            {todayEntry
+              ? `${MOOD_EMOJIS[todayEntry.mood]} Feeling ${MOOD_LABELS[todayEntry.mood]}`
+              : "Welcome Back"}
+          </h2>
+          <p className="text-muted text-sm mt-1">
+            {format(new Date(), "EEEE, MMMM d, yyyy")}
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        {!todayEntry && (
+          <Link
+            href="/checkin"
+            className="flex items-center gap-2 bg-primary text-white px-5 py-3 rounded-xl font-medium hover:bg-primary-light transition-all shadow-lg"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <PenSquare size={16} />
+            Check In Today
+          </Link>
+        )}
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="bg-surface rounded-2xl border border-border p-5">
+          <div className="flex items-center gap-2 text-muted text-xs font-medium mb-2">
+            <TrendingUp size={14} />
+            Avg Mood
+          </div>
+          <div className="text-2xl font-bold text-foreground">{avgMood}<span className="text-sm text-muted">/5</span></div>
         </div>
-      </main>
+        <div className="bg-surface rounded-2xl border border-border p-5">
+          <div className="flex items-center gap-2 text-muted text-xs font-medium mb-2">
+            <Brain size={14} />
+            Avg Energy
+          </div>
+          <div className="text-2xl font-bold text-foreground">{avgEnergy}<span className="text-sm text-muted">/5</span></div>
+        </div>
+        <div className="bg-surface rounded-2xl border border-border p-5">
+          <div className="flex items-center gap-2 text-muted text-xs font-medium mb-2">
+            <Flame size={14} />
+            Streak
+          </div>
+          <div className="text-2xl font-bold text-foreground">{streak} <span className="text-sm text-muted">days</span></div>
+        </div>
+        <div className="bg-surface rounded-2xl border border-border p-5">
+          <div className="flex items-center gap-2 text-muted text-xs font-medium mb-2">
+            <PenSquare size={14} />
+            Total Entries
+          </div>
+          <div className="text-2xl font-bold text-foreground">{totalEntries}</div>
+        </div>
+      </div>
+
+      {/* Mood & Energy Chart */}
+      {chartData.length > 1 ? (
+        <div className="bg-surface rounded-2xl border border-border p-6 mb-8">
+          <h3 className="text-lg font-semibold text-foreground mb-4">Mood & Energy Trends</h3>
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="moodGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#6c63ff" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#6c63ff" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="energyGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#fd79a8" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#fd79a8" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="var(--muted)" />
+              <YAxis domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} tick={{ fontSize: 12 }} stroke="var(--muted)" />
+              <Tooltip
+                contentStyle={{
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "12px",
+                  fontSize: "13px",
+                }}
+              />
+              <Area type="monotone" dataKey="mood" stroke="#6c63ff" fill="url(#moodGradient)" strokeWidth={2} name="Mood" />
+              <Area type="monotone" dataKey="energy" stroke="#fd79a8" fill="url(#energyGradient)" strokeWidth={2} name="Energy" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <div className="bg-surface rounded-2xl border border-border p-12 text-center mb-8">
+          <p className="text-4xl mb-4">📊</p>
+          <h3 className="text-lg font-semibold text-foreground mb-2">Start Your Journey</h3>
+          <p className="text-muted text-sm mb-4">
+            Log at least 2 days to see your mood and energy trends here.
+          </p>
+          <Link
+            href="/checkin"
+            className="inline-flex items-center gap-2 bg-primary text-white px-5 py-3 rounded-xl font-medium hover:bg-primary-light transition-all"
+          >
+            <PenSquare size={16} />
+            First Check-In
+          </Link>
+        </div>
+      )}
+
+      {/* Recent Entries */}
+      {entries.length > 0 && (
+        <div className="bg-surface rounded-2xl border border-border p-6">
+          <h3 className="text-lg font-semibold text-foreground mb-4">Recent Entries</h3>
+          <div className="space-y-3">
+            {entries.slice(-5).reverse().map((entry) => (
+              <div
+                key={entry.date}
+                className="flex items-center justify-between p-4 rounded-xl bg-background border border-border"
+              >
+                <div className="flex items-center gap-4">
+                  <span className="text-2xl">{MOOD_EMOJIS[entry.mood]}</span>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      {format(new Date(entry.date + "T12:00:00"), "EEEE, MMM d")}
+                    </p>
+                    <p className="text-xs text-muted">
+                      {entry.activities.slice(0, 3).join(", ")}
+                      {entry.activities.length > 3 && ` +${entry.activities.length - 3}`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-4 text-xs text-muted">
+                  <span>Mood: {MOOD_LABELS[entry.mood]}</span>
+                  <span>Energy: {entry.energy}/5</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
